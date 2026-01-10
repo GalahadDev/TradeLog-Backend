@@ -26,7 +26,7 @@ func GetCalendarMetrics(c *gin.Context) {
 
 	// CONSTRUCCIÓN DE LA CONSULTA OPTIMIZADA
 	query := db.Table("trades").
-		Select("TO_CHAR(entry_date, 'YYYY-MM-DD') as date, SUM(pnl) as total_pnl, COUNT(*) as trade_count").
+		Select("TO_CHAR(entry_date, 'YYYY-MM-DD') as date, SUM(pnl - commission) as total_pnl, COUNT(*) as trade_count").
 		Where("user_id = ?", userID).
 		Where("status = ?", "CLOSED")
 

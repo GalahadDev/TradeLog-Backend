@@ -9,6 +9,7 @@ import (
 	"samll-trading-back/api/domains"
 
 	"github.com/gin-gonic/gin"
+	"github.com/lib/pq"
 	"github.com/shopspring/decimal"
 )
 
@@ -66,7 +67,6 @@ func UpdateTrade(c *gin.Context) {
 		updates["status"] = upper
 	}
 
-	// Decimales
 	if req.EntryPrice != nil {
 		updates["entry_price"] = *req.EntryPrice
 	}
@@ -99,7 +99,7 @@ func UpdateTrade(c *gin.Context) {
 
 	// Arrays (Tags)
 	if req.Tags != nil {
-		updates["tags"] = req.Tags
+		updates["tags"] = pq.StringArray(req.Tags)
 	}
 
 	// 3. Ejecutar Update
