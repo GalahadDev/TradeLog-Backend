@@ -17,6 +17,9 @@ type TradingStats struct {
 	SharpeRatio    decimal.Decimal `json:"sharpe_ratio"`
 	ExpectedPayoff decimal.Decimal `json:"expected_payoff"`
 
+	// --- Gastos ---
+	TotalCommissions decimal.Decimal `json:"total_commissions"`
+
 	// --- Actividad ---
 	TotalTrades  int             `json:"total_trades"`
 	AvgTradeSize decimal.Decimal `json:"avg_trade_size"`
@@ -49,6 +52,7 @@ func CalculateStats(trades []domains.Trade) TradingStats {
 		GrossProfit:          decimal.Zero,
 		GrossLoss:            decimal.Zero,
 		MaxDrawdown:          decimal.Zero,
+		TotalCommissions:     decimal.Zero,
 		MaxConsecutiveProfit: decimal.Zero,
 		MaxConsecutiveLoss:   decimal.Zero,
 	}
@@ -169,7 +173,13 @@ func CalculateStats(trades []domains.Trade) TradingStats {
 		if drawdown.GreaterThan(stats.MaxDrawdown) {
 			stats.MaxDrawdown = drawdown
 		}
+
+		// Acumular Comisiones
+		stats.TotalCommissions = stats.TotalCommissions.Add(t.Commission)
 	}
+
+	// Restar comisiones del Net Profit
+	stats.TotalNetProfit = stats.TotalNetProfit.Sub(stats.TotalCommissions)
 
 	// --- CÁLCULOS FINALES ---
 
