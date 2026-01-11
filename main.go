@@ -10,6 +10,7 @@ import (
 	"samll-trading-back/api/handlers/trades"
 	"samll-trading-back/api/handlers/users"
 	"samll-trading-back/api/middleware"
+	"time"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -28,11 +29,12 @@ func main() {
 
 	// Configuración de CORS
 	r.Use(cors.New(cors.Config{
-		AllowAllOrigins:  true, // En producción, cambiar esto por la URL específica del front
+		AllowOrigins:     []string{"https://tradelog-app.vercel.app","https://cron-job.org"},
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
 		ExposeHeaders:    []string{"Content-Length"},
 		AllowCredentials: true,
+		MaxAge:           12 * time.Hour,
 	}))
 
 	// Health Check: Para verificar que el servidor está vivo (Ping)
@@ -100,3 +102,5 @@ func main() {
 		log.Fatal("❌ Error al iniciar el servidor:", err)
 	}
 }
+
+
