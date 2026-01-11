@@ -10,6 +10,7 @@ import (
 	"samll-trading-back/api/handlers/trades"
 	"samll-trading-back/api/handlers/users"
 	"samll-trading-back/api/middleware"
+	"time"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -101,4 +102,5 @@ func main() {
 		log.Fatal("❌ Error al iniciar el servidor:", err)
 	}
 }
+
 
