@@ -1,11 +1,17 @@
 package users
 
 import (
+	"errors"
+	"log"
 	"net/http"
+	"net/url"
+
 	"samll-trading-back/api/database"
 	"samll-trading-back/api/domains"
+	"samll-trading-back/api/response"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 type UserUpdateReq struct {
@@ -21,15 +27,29 @@ func UpdateMyProfile(c *gin.Context) {
 
 	var req UserUpdateReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Datos inválidos"})
+		log.Printf("UpdateMyProfile bind error: %v", err)
+		response.BadRequest(c, "Datos inválidos")
 		return
+	}
+
+	if req.AvatarURL != nil && *req.AvatarURL != "" {
+		parsed, err := url.Parse(*req.AvatarURL)
+		if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+			response.BadRequest(c, "avatar_url debe ser una URL válida con esquema http o https")
+			return
+		}
 	}
 
 	db := database.GetDB()
 	var user domains.User
 
 	if err := db.First(&user, "id = ?", userID).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Usuario no encontrado"})
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			response.NotFound(c, "Usuario no encontrado")
+		} else {
+			log.Printf("UpdateMyProfile db error userID=%s: %v", userID, err)
+			response.InternalError(c)
+		}
 		return
 	}
 
@@ -47,19 +67,15 @@ func UpdateMyProfile(c *gin.Context) {
 	if req.TradingExperience != nil {
 		updates["trading_experience"] = *req.TradingExperience
 	}
-
 	if req.AvatarURL != nil {
 		updates["avatar_url"] = *req.AvatarURL
 	}
 
 	if err := db.Model(&user).Updates(updates).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "No se pudo actualizar el perfil"})
+		log.Printf("UpdateMyProfile update error userID=%s: %v", userID, err)
+		response.InternalError(c)
 		return
 	}
 
-	// Devolvemos el usuario actualizado para que el front refresque la vista
-	c.JSON(http.StatusOK, gin.H{
-		"message": "Perfil actualizado correctamente",
-		"user":    user,
-	})
+	c.JSON(http.StatusOK, gin.H{"message": "Perfil actualizado correctamente", "user": user})
 }

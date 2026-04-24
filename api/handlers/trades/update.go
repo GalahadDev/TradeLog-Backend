@@ -1,20 +1,25 @@
 package trades
 
 import (
+	"errors"
+	"log"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
+	"samll-trading-back/api/cache"
 	"samll-trading-back/api/database"
 	"samll-trading-back/api/domains"
+	"samll-trading-back/api/response"
 
 	"github.com/gin-gonic/gin"
 	"github.com/lib/pq"
 	"github.com/shopspring/decimal"
+	"gorm.io/gorm"
 )
 
 type TradeUpdateReq struct {
-	// Datos editables
 	Symbol     *string          `json:"symbol"`
 	Direction  *string          `json:"direction"`
 	Status     *string          `json:"status"`
@@ -24,7 +29,6 @@ type TradeUpdateReq struct {
 	PnL        *decimal.Decimal `json:"pnl"`
 	Commission *decimal.Decimal `json:"commission"`
 
-	// Fechas y Extras
 	EntryDate  *time.Time `json:"entry_date"`
 	ExitDate   *time.Time `json:"exit_date"`
 	Notes      *string    `json:"notes"`
@@ -33,47 +37,65 @@ type TradeUpdateReq struct {
 }
 
 func UpdateTrade(c *gin.Context) {
-	userID := c.GetString("userID")
-	tradeID := c.Param("id")
+	accountID := c.GetString("accountID")
+	tradeID := c.Param("trade_id")
 
 	var req TradeUpdateReq
-	// Validar JSON
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Datos inválidos", "details": err.Error()})
+		log.Printf("UpdateTrade bind error: %v", err)
+		response.BadRequest(c, "Datos inválidos")
 		return
 	}
 
 	db := database.GetDB()
 	var trade domains.Trade
 
-	// 1. Verificar propiedad del trade antes de editar
-	if err := db.Where("id = ? AND user_id = ?", tradeID, userID).First(&trade).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Trade no encontrado"})
+	if err := db.Where("id = ? AND account_id = ?", tradeID, accountID).First(&trade).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			response.NotFound(c, "Trade no encontrado")
+		} else {
+			log.Printf("UpdateTrade fetch error tradeID=%s accountID=%s: %v", tradeID, accountID, err)
+			response.InternalError(c)
+		}
 		return
 	}
 
-	// 2. Construir mapa de actualización dinámica
-	updates := make(map[string]interface{})
+	updates := make(map[string]any)
 
 	if req.Symbol != nil {
 		updates["symbol"] = *req.Symbol
 	}
 	if req.Direction != nil {
 		upper := strings.ToUpper(*req.Direction)
+		if !validDirections[upper] {
+			response.BadRequest(c, "direction debe ser LONG o SHORT")
+			return
+		}
 		updates["direction"] = upper
 	}
 	if req.Status != nil {
 		upper := strings.ToUpper(*req.Status)
+		if !validStatuses[upper] {
+			response.BadRequest(c, "status debe ser OPEN, CLOSED o PENDING")
+			return
+		}
 		updates["status"] = upper
 	}
-
 	if req.EntryPrice != nil {
+		if req.EntryPrice.IsZero() || req.EntryPrice.IsNegative() {
+			response.BadRequest(c, "entry_price debe ser mayor que 0")
+			return
+		}
 		updates["entry_price"] = *req.EntryPrice
 	}
 	if req.ExitPrice != nil {
 		updates["exit_price"] = *req.ExitPrice
 	}
 	if req.Size != nil {
+		if req.Size.IsZero() || req.Size.IsNegative() {
+			response.BadRequest(c, "size debe ser mayor que 0")
+			return
+		}
 		updates["size"] = *req.Size
 	}
 	if req.PnL != nil {
@@ -82,8 +104,6 @@ func UpdateTrade(c *gin.Context) {
 	if req.Commission != nil {
 		updates["commission"] = *req.Commission
 	}
-
-	// Fechas y Textos
 	if req.EntryDate != nil {
 		updates["entry_date"] = *req.EntryDate
 	}
@@ -94,22 +114,25 @@ func UpdateTrade(c *gin.Context) {
 		updates["notes"] = *req.Notes
 	}
 	if req.Screenshot != nil {
+		if *req.Screenshot != "" {
+			parsed, err := url.Parse(*req.Screenshot)
+			if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+				response.BadRequest(c, "screenshot_url debe ser una URL válida con esquema http o https")
+				return
+			}
+		}
 		updates["screenshot_url"] = *req.Screenshot
 	}
-
-	// Arrays (Tags)
 	if req.Tags != nil {
 		updates["tags"] = pq.StringArray(req.Tags)
 	}
 
-	// 3. Ejecutar Update
 	if err := db.Model(&trade).Updates(updates).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error al actualizar trade"})
+		log.Printf("UpdateTrade db error tradeID=%s accountID=%s: %v", tradeID, accountID, err)
+		response.InternalError(c)
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"message": "Operación actualizada",
-		"trade":   trade,
-	})
+	cache.Stats.Invalidate(accountID)
+	c.JSON(http.StatusOK, gin.H{"message": "Operación actualizada", "trade": trade})
 }

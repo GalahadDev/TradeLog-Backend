@@ -16,9 +16,13 @@ func AdminOnly() gin.HandlerFunc {
 			return
 		}
 
-		user := userCtx.(domains.User)
+		user, ok := userCtx.(domains.User)
+		if !ok {
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Error interno de autenticación"})
+			return
+		}
 
-		if user.Role != "admin" {
+		if user.Role != domains.RoleAdmin {
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
 				"error":   "INSUFFICIENT_PERMISSIONS",
 				"message": "Acceso denegado: Se requieren privilegios de Administrador.",

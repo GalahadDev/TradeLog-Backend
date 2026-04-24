@@ -2,6 +2,7 @@ package database
 
 import (
 	"log"
+	"os"
 	"time"
 
 	"samll-trading-back/api/config"
@@ -17,9 +18,14 @@ func ConnectDB() {
 	var err error
 	dsn := config.GetDBURL()
 
-	// Configuración avanzada de GORM
+	// Nivel de logging
+	logLevel := logger.Silent
+	if os.Getenv("APP_ENV") != "production" {
+		logLevel = logger.Info
+	}
+
 	DB, err = gorm.Open(postgres.Open(dsn), &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Info),
+		Logger: logger.Default.LogMode(logLevel),
 	})
 
 	if err != nil {
@@ -32,10 +38,11 @@ func ConnectDB() {
 		log.Fatal("❌ Error obteniendo instancia SQL:", err)
 	}
 
-	// Ajustes para plan gratuito/hobby
-	sqlDB.SetMaxIdleConns(5)            // Mantener 5 conexiones libres listas
-	sqlDB.SetMaxOpenConns(20)           // Máximo 20 conexiones simultáneas
-	sqlDB.SetConnMaxLifetime(time.Hour) // Renovar conexiones cada hora
+	// Ajustes de Supabase
+	sqlDB.SetMaxIdleConns(5)                  // Mantener 5 conexiones libres listas
+	sqlDB.SetMaxOpenConns(20)                 // Máximo 20 conexiones simultáneas
+	sqlDB.SetConnMaxLifetime(time.Hour)       // Renovar conexiones cada hora
+	sqlDB.SetConnMaxIdleTime(5 * time.Minute) // Cerrar conexiones idle >5 min para no agotar el pool
 
 	log.Println("✅ Conexión a Base de Datos exitosa (Pool configurado)")
 }

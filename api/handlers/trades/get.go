@@ -1,36 +1,45 @@
 package trades
 
 import (
+	"errors"
+	"log"
 	"net/http"
-	"samll-trading-back/api/database"
-	"samll-trading-back/api/domains"
 	"strconv"
 
+	"samll-trading-back/api/database"
+	"samll-trading-back/api/domains"
+	"samll-trading-back/api/response"
+
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 func GetTrades(c *gin.Context) {
-	userID := c.GetString("userID")
+	accountID := c.GetString("accountID")
 
-	// Paginación
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 {
+		limit = 1
+	}
+	if limit > 100 {
+		limit = 100
+	}
 	offset := (page - 1) * limit
 
 	var trades []domains.Trade
 	var total int64
 
 	db := database.GetDB()
-
-	// Query Base con Tenant Isolation
-	query := db.Model(&domains.Trade{}).Where("user_id = ?", userID)
-
-	// Contar total
+	query := db.Model(&domains.Trade{}).Where("account_id = ?", accountID)
 	query.Count(&total)
 
-	// Obtener datos paginados y ordenados por fecha entrada
 	if err := query.Order("entry_date desc").Offset(offset).Limit(limit).Find(&trades).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error al obtener trades"})
+		log.Printf("GetTrades db error accountID=%s: %v", accountID, err)
+		response.InternalError(c)
 		return
 	}
 
@@ -45,17 +54,19 @@ func GetTrades(c *gin.Context) {
 }
 
 func GetTradeByID(c *gin.Context) {
-	// 1. Obtener IDs
-	userID := c.GetString("userID")
-	tradeID := c.Param("id")
+	accountID := c.GetString("accountID")
+	tradeID := c.Param("trade_id")
 
 	var trade domains.Trade
 	db := database.GetDB()
 
-	// 2. Buscar con Tenant Isolation
-	// Solo devolvemos el trade si el ID coincide Y el dueño es el usuario actual
-	if err := db.Where("id = ? AND user_id = ?", tradeID, userID).First(&trade).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Trade no encontrado"})
+	if err := db.Where("id = ? AND account_id = ?", tradeID, accountID).First(&trade).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			response.NotFound(c, "Trade no encontrado")
+		} else {
+			log.Printf("GetTradeByID db error tradeID=%s accountID=%s: %v", tradeID, accountID, err)
+			response.InternalError(c)
+		}
 		return
 	}
 

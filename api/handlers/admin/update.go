@@ -1,33 +1,43 @@
 package admin
 
 import (
+	"errors"
+	"log"
 	"net/http"
+
 	"samll-trading-back/api/database"
 	"samll-trading-back/api/domains"
+	"samll-trading-back/api/response"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
-// Usamos punteros (*) para saber si el campo vino en el JSON o no.
-// Si es nil, no se actualiza.
 type AdminPatchReq struct {
-	FullName          *string `json:"full_name"`
-	PhoneNumber       *string `json:"phone_number"`
-	Bio               *string `json:"bio"`
-	TradingExperience *string `json:"trading_experience"`
-	AvatarURL         *string `json:"avatar_url"`
-	Role              *string `json:"role"`
-	IsActive          *bool   `json:"is_active"`
-	IsVerified        *bool   `json:"is_verified"`
+	FullName          *string           `json:"full_name"`
+	PhoneNumber       *string           `json:"phone_number"`
+	Bio               *string           `json:"bio"`
+	TradingExperience *string           `json:"trading_experience"`
+	AvatarURL         *string           `json:"avatar_url"`
+	Role              *domains.UserRole `json:"role"`
+	IsActive          *bool             `json:"is_active"`
+	IsVerified        *bool             `json:"is_verified"`
 }
+
+var allowedRoles = map[domains.UserRole]bool{domains.RoleUser: true, domains.RoleAdmin: true}
 
 func UpdateUser(c *gin.Context) {
 	id := c.Param("id")
 	var req AdminPatchReq
 
-	// Validar JSON
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Datos inválidos: revisa los tipos de datos (ej: bool sin comillas)"})
+		log.Printf("AdminUpdateUser bind error: %v", err)
+		response.BadRequest(c, "Datos inválidos: revisa los tipos de datos (ej: bool sin comillas)")
+		return
+	}
+
+	if req.Role != nil && !allowedRoles[*req.Role] {
+		response.BadRequest(c, "role debe ser 'user' o 'admin'")
 		return
 	}
 
@@ -35,11 +45,15 @@ func UpdateUser(c *gin.Context) {
 	var user domains.User
 
 	if err := db.First(&user, "id = ?", id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Usuario no encontrado"})
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			response.NotFound(c, "Usuario no encontrado")
+		} else {
+			log.Printf("AdminUpdateUser db error userID=%s: %v", id, err)
+			response.InternalError(c)
+		}
 		return
 	}
 
-	// Actualización Dinámica: Solo actualizamos lo que no sea nil
 	updates := make(map[string]interface{})
 
 	if req.FullName != nil {
@@ -67,9 +81,9 @@ func UpdateUser(c *gin.Context) {
 		updates["is_verified"] = *req.IsVerified
 	}
 
-	// Updates de GORM actualiza solo los campos presentes en el mapa
 	if err := db.Model(&user).Updates(updates).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error al guardar cambios"})
+		log.Printf("AdminUpdateUser update error userID=%s: %v", id, err)
+		response.InternalError(c)
 		return
 	}
 

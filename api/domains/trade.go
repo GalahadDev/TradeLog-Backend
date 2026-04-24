@@ -5,11 +5,13 @@ import (
 
 	"github.com/lib/pq"
 	"github.com/shopspring/decimal"
+	"gorm.io/gorm"
 )
 
 type Trade struct {
-	ID     string `gorm:"primaryKey;type:uuid;default:gen_random_uuid()" json:"id"`
-	UserID string `gorm:"type:uuid;not null;index" json:"user_id"`
+	ID        string `gorm:"primaryKey;type:uuid;default:gen_random_uuid()" json:"id"`
+	UserID    string `gorm:"type:uuid;not null;index"                       json:"user_id"`
+	AccountID string `gorm:"type:uuid;not null;index"                       json:"account_id"`
 
 	Symbol    string `gorm:"not null" json:"symbol"`
 	Direction string `gorm:"not null" json:"direction"`
@@ -29,7 +31,8 @@ type Trade struct {
 
 	Tags pq.StringArray `gorm:"type:text[]" json:"tags"`
 
-	CreatedAt time.Time `json:"created_at"`
+	CreatedAt time.Time      `json:"created_at"`
+	DeletedAt gorm.DeletedAt `gorm:"index"      json:"-"`
 }
 
 func (Trade) TableName() string {
