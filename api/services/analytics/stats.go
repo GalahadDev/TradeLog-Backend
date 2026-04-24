@@ -8,7 +8,7 @@ import (
 )
 
 type TradingStats struct {
-	// --- Rendimiento General ---
+	// Rendimiento General
 	TotalNetProfit decimal.Decimal `json:"total_net_profit"`
 	GrossProfit    decimal.Decimal `json:"gross_profit"`
 	GrossLoss      decimal.Decimal `json:"gross_loss"`
@@ -17,29 +17,29 @@ type TradingStats struct {
 	SharpeRatio    decimal.Decimal `json:"sharpe_ratio"`
 	ExpectedPayoff decimal.Decimal `json:"expected_payoff"`
 
-	// --- Gastos ---
+	// Gastos
 	TotalCommissions decimal.Decimal `json:"total_commissions"`
 
-	// --- Actividad ---
+	// Actividad
 	TotalTrades  int             `json:"total_trades"`
 	AvgTradeSize decimal.Decimal `json:"avg_trade_size"`
 
-	// --- Drawdown ---
+	// Drawdown
 	MaxDrawdown decimal.Decimal `json:"max_drawdown"`
 
-	// --- Promedios y Extremos ---
+	// Promedios y Extremos
 	AvgWin      decimal.Decimal `json:"avg_win"`
 	AvgLoss     decimal.Decimal `json:"avg_loss"`
 	LargestWin  decimal.Decimal `json:"largest_win"`
 	LargestLoss decimal.Decimal `json:"largest_loss"`
 
-	// --- Tasas de Éxito ---
+	// Tasas de Éxito
 	WinRate      decimal.Decimal `json:"win_rate"`
 	LossRate     decimal.Decimal `json:"loss_rate"`
 	LongWinRate  decimal.Decimal `json:"long_win_rate"`
 	ShortWinRate decimal.Decimal `json:"short_win_rate"`
 
-	// --- Rachas (Consecutive) ---
+	// Rachas Consecutivas
 	MaxConsecutiveWins   int             `json:"max_consecutive_wins"`
 	MaxConsecutiveLosses int             `json:"max_consecutive_losses"`
 	MaxConsecutiveProfit decimal.Decimal `json:"max_consecutive_profit_usd"`
@@ -79,10 +79,10 @@ func CalculateStats(trades []domains.Trade) TradingStats {
 	peakBalance := decimal.Zero
 	currentBalance := decimal.Zero
 
-	// Para Sharpe Ratio (Almacenamos los PnLs)
-	var pnlHistory []float64
+	// Para Sharpe Ratio (pre-alocado con capacidad exacta para evitar re-allocaciones)
+	pnlHistory := make([]decimal.Decimal, 0, len(trades))
 
-	// Para Rachas (Consecutive)
+	// Para Rachas Consecutivas
 	currentWinStreak := 0
 	currentLossStreak := 0
 	currentWinStreakMoney := decimal.Zero
@@ -90,17 +90,17 @@ func CalculateStats(trades []domains.Trade) TradingStats {
 
 	for _, t := range trades {
 		pnl := t.PnL
-		pnlHistory = append(pnlHistory, pnl.InexactFloat64())
+		pnlHistory = append(pnlHistory, pnl)
 
-		// Acumular Tamaño (Lots/Size)
+		// Acumular tamaño de posición (lotes/size)
 		totalSize = totalSize.Add(t.Size)
 
 		// 1. Acumulados Generales
 		stats.TotalNetProfit = stats.TotalNetProfit.Add(pnl)
 
-		// 2. Análisis Win/Loss y Rachas
+		// 2. Análisis de ganancias/pérdidas y rachas
 		if pnl.GreaterThan(decimal.Zero) {
-			// Es WIN
+			// Es ganancia
 			stats.GrossProfit = stats.GrossProfit.Add(pnl)
 			wins++
 			winSum = winSum.Add(pnl)
@@ -124,7 +124,7 @@ func CalculateStats(trades []domains.Trade) TradingStats {
 				stats.MaxConsecutiveProfit = currentWinStreakMoney
 			}
 
-			// Direction Analysis
+			// Análisis por dirección
 			if t.Direction == "LONG" {
 				longWins++
 			} else {
@@ -132,7 +132,7 @@ func CalculateStats(trades []domains.Trade) TradingStats {
 			}
 
 		} else {
-			// Es LOSS (o Break Even negativo)
+			// Es pérdida (o break even negativo)
 			stats.GrossLoss = stats.GrossLoss.Add(pnl)
 			lossCount++
 			lossSum = lossSum.Add(pnl)
@@ -183,20 +183,20 @@ func CalculateStats(trades []domains.Trade) TradingStats {
 
 	// --- CÁLCULOS FINALES ---
 
-	// Profit Factor
+	// Factor de ganancia
 	if !stats.GrossLoss.IsZero() {
 		stats.ProfitFactor = stats.GrossProfit.Div(stats.GrossLoss.Abs())
 	} else {
 		stats.ProfitFactor = stats.GrossProfit
 	}
 
-	// Expectancy (Expected Payoff): Total Net Profit / Count
+	// Expectativa (ganancia esperada): Beneficio neto total / Cantidad de trades
 	stats.ExpectedPayoff = stats.TotalNetProfit.Div(decimal.NewFromInt(int64(stats.TotalTrades)))
 
-	// Avg Trade Size
+	// Tamaño promedio de posición
 	stats.AvgTradeSize = totalSize.Div(decimal.NewFromInt(int64(stats.TotalTrades)))
 
-	// Recovery Factor: Net Profit / Max Drawdown
+	// Factor de recuperación: Beneficio neto / Drawdown máximo
 	if !stats.MaxDrawdown.IsZero() {
 		stats.RecoveryFactor = stats.TotalNetProfit.Div(stats.MaxDrawdown)
 	} else {
@@ -207,12 +207,12 @@ func CalculateStats(trades []domains.Trade) TradingStats {
 		}
 	}
 
-	// Win/Loss Rates
+	// Tasas de acierto/fallo
 	totalTradesDec := decimal.NewFromInt(int64(stats.TotalTrades))
 	stats.WinRate = decimal.NewFromInt(int64(wins)).Div(totalTradesDec).Mul(decimal.NewFromInt(100))
 	stats.LossRate = decimal.NewFromInt(int64(lossCount)).Div(totalTradesDec).Mul(decimal.NewFromInt(100))
 
-	// Averages
+	// Promedios
 	if wins > 0 {
 		stats.AvgWin = winSum.Div(decimal.NewFromInt(int64(wins)))
 	}
@@ -220,7 +220,7 @@ func CalculateStats(trades []domains.Trade) TradingStats {
 		stats.AvgLoss = lossSum.Div(decimal.NewFromInt(int64(lossCount)))
 	}
 
-	// Direction Win Rates
+	// Tasas de acierto por dirección
 	if longs > 0 {
 		stats.LongWinRate = decimal.NewFromInt(int64(longWins)).Div(decimal.NewFromInt(int64(longs))).Mul(decimal.NewFromInt(100))
 	}
@@ -229,29 +229,35 @@ func CalculateStats(trades []domains.Trade) TradingStats {
 	}
 
 	// Sharpe Ratio (Simplificado: Promedio / Desviación Estándar)
+	// La media y varianza se calculan en decimal; solo se convierte a float64 para math.Sqrt.
 	if len(pnlHistory) > 1 {
 		stdDev := calculateStdDev(pnlHistory)
-		if stdDev > 0 {
-			// Usamos Expected Payoff como el promedio por trade
-			avgReturn, _ := stats.ExpectedPayoff.Float64()
-			stats.SharpeRatio = decimal.NewFromFloat(avgReturn / stdDev)
+		if stdDev.IsPositive() {
+			stats.SharpeRatio = stats.ExpectedPayoff.Div(stdDev)
 		}
 	}
 
 	return stats
 }
 
-// Helper para Desviación Estándar
-func calculateStdDev(data []float64) float64 {
-	var sum, mean, sd float64
-	for _, num := range data {
-		sum += num
-	}
-	mean = sum / float64(len(data))
+// calculateStdDev calcula la desviación estándar poblacional en decimal.
+// La media y varianza se calculan con precisión decimal; solo el Sqrt final usa float64.
+func calculateStdDev(data []decimal.Decimal) decimal.Decimal {
+	n := decimal.NewFromInt(int64(len(data)))
 
-	for _, num := range data {
-		sd += math.Pow(num-mean, 2)
+	sum := decimal.Zero
+	for _, v := range data {
+		sum = sum.Add(v)
 	}
-	sd = math.Sqrt(sd / float64(len(data)))
-	return sd
+	mean := sum.Div(n)
+
+	variance := decimal.Zero
+	for _, v := range data {
+		diff := v.Sub(mean)
+		variance = variance.Add(diff.Mul(diff))
+	}
+	variance = variance.Div(n)
+
+	varianceF64, _ := variance.Float64()
+	return decimal.NewFromFloat(math.Sqrt(varianceF64))
 }

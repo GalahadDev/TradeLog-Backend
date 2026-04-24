@@ -1,11 +1,16 @@
 package admin
 
 import (
+	"errors"
+	"log"
 	"net/http"
+
 	"samll-trading-back/api/database"
 	"samll-trading-back/api/domains"
+	"samll-trading-back/api/response"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 func GetUserByID(c *gin.Context) {
@@ -13,9 +18,14 @@ func GetUserByID(c *gin.Context) {
 	var user domains.User
 
 	db := database.GetDB()
-	// Buscamos por ID
+
 	if err := db.First(&user, "id = ?", id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Usuario no encontrado"})
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			response.NotFound(c, "Usuario no encontrado")
+		} else {
+			log.Printf("AdminGetUserByID db error userID=%s: %v", id, err)
+			response.InternalError(c)
+		}
 		return
 	}
 

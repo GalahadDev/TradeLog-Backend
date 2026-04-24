@@ -1,38 +1,69 @@
 package trades
 
 import (
+	"log"
 	"net/http"
 	"strings"
 
+	"samll-trading-back/api/cache"
 	"samll-trading-back/api/database"
 	"samll-trading-back/api/domains"
+	"samll-trading-back/api/response"
 
 	"github.com/gin-gonic/gin"
 )
 
+var validDirections = map[string]bool{"LONG": true, "SHORT": true}
+var validStatuses = map[string]bool{"OPEN": true, "CLOSED": true, "PENDING": true}
+
 func CreateTrade(c *gin.Context) {
-	// 1. Tenant Isolation: Obtener ID del usuario autenticado
 	userID := c.GetString("userID")
+	accountID := c.GetString("accountID")
 
 	var trade domains.Trade
 	if err := c.ShouldBindJSON(&trade); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Datos inválidos", "details": err.Error()})
+		log.Printf("CreateTrade bind error: %v", err)
+		response.BadRequest(c, "Datos inválidos")
 		return
 	}
 
-	// 2. Sobrescribir el UserID para evitar suplantación
 	trade.UserID = userID
+	trade.AccountID = accountID
 
-	// 3. NORMALIZACIÓN
 	trade.Direction = strings.ToUpper(trade.Direction)
 	trade.Status = strings.ToUpper(trade.Status)
+	if trade.Status == "" {
+		trade.Status = "CLOSED"
+	}
 
-	// 4. Guardar en DB
-	db := database.GetDB()
-	if err := db.Create(&trade).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error al guardar el trade", "details": err.Error()})
+	if trade.Symbol == "" {
+		response.BadRequest(c, "El campo symbol es requerido")
+		return
+	}
+	if !validDirections[trade.Direction] {
+		response.BadRequest(c, "direction debe ser LONG o SHORT")
+		return
+	}
+	if !validStatuses[trade.Status] {
+		response.BadRequest(c, "status debe ser OPEN, CLOSED o PENDING")
+		return
+	}
+	if trade.EntryPrice.IsZero() || trade.EntryPrice.IsNegative() {
+		response.BadRequest(c, "entry_price debe ser mayor que 0")
+		return
+	}
+	if trade.Size.IsZero() || trade.Size.IsNegative() {
+		response.BadRequest(c, "size debe ser mayor que 0")
 		return
 	}
 
+	db := database.GetDB()
+	if err := db.Create(&trade).Error; err != nil {
+		log.Printf("CreateTrade db error accountID=%s: %v", accountID, err)
+		response.InternalError(c)
+		return
+	}
+
+	cache.Stats.Invalidate(accountID)
 	c.JSON(http.StatusCreated, gin.H{"trade": trade})
 }
