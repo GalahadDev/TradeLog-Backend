@@ -26,8 +26,8 @@ type Trade struct {
 	EntryDate time.Time  `gorm:"not null" json:"entry_date"`
 	ExitDate  *time.Time `json:"exit_date"`
 
-	Notes      string `json:"notes"`
-	Screenshot string `gorm:"column:screenshot_url" json:"screenshot_url"`
+	Notes       string         `json:"notes"`
+	Screenshots pq.StringArray `gorm:"type:text[];column:screenshot_urls" json:"screenshot_urls"`
 
 	Tags pq.StringArray `gorm:"type:text[]" json:"tags"`
 

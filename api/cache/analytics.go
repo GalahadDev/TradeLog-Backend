@@ -25,7 +25,28 @@ type StatsCache struct {
 }
 
 // Stats es la instancia global del caché utilizada por los handlers.
-var Stats = &StatsCache{store: make(map[string]statsEntry)}
+var Stats = newStatsCache()
+
+func newStatsCache() *StatsCache {
+	c := &StatsCache{store: make(map[string]statsEntry)}
+	go c.evictLoop()
+	return c
+}
+
+// evictLoop elimina entradas expiradas cada minuto para evitar crecimiento indefinido del mapa.
+func (c *StatsCache) evictLoop() {
+	for {
+		time.Sleep(time.Minute)
+		now := time.Now()
+		c.mu.Lock()
+		for k, e := range c.store {
+			if now.After(e.expiresAt) {
+				delete(c.store, k)
+			}
+		}
+		c.mu.Unlock()
+	}
+}
 
 // Key construye la clave canónica del caché para una solicitud de estadísticas.
 func Key(accountID, startDate, endDate string) string {

@@ -16,7 +16,7 @@ func DeleteTrade(c *gin.Context) {
 
 	db := database.GetDB()
 
-	result := db.Delete(&domains.Trade{}, "id = ? AND account_id = ?", tradeID, accountID)
+	result := db.Unscoped().Delete(&domains.Trade{}, "id = ? AND account_id = ?", tradeID, accountID)
 
 	if result.Error != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error al eliminar"})

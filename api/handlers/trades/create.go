@@ -40,6 +40,14 @@ func CreateTrade(c *gin.Context) {
 		response.BadRequest(c, "El campo symbol es requerido")
 		return
 	}
+	if len(trade.Symbol) > 20 {
+		response.BadRequest(c, "symbol no puede superar 20 caracteres")
+		return
+	}
+	if len(trade.Notes) > 5000 {
+		response.BadRequest(c, "notes no puede superar 5000 caracteres")
+		return
+	}
 	if !validDirections[trade.Direction] {
 		response.BadRequest(c, "direction debe ser LONG o SHORT")
 		return
@@ -54,6 +62,10 @@ func CreateTrade(c *gin.Context) {
 	}
 	if trade.Size.IsZero() || trade.Size.IsNegative() {
 		response.BadRequest(c, "size debe ser mayor que 0")
+		return
+	}
+	if err := validateScreenshotPaths([]string(trade.Screenshots), userID); err != nil {
+		response.BadRequest(c, err.Error())
 		return
 	}
 
