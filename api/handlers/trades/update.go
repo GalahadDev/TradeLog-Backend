@@ -4,7 +4,6 @@ import (
 	"errors"
 	"log"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
 
@@ -29,14 +28,15 @@ type TradeUpdateReq struct {
 	PnL        *decimal.Decimal `json:"pnl"`
 	Commission *decimal.Decimal `json:"commission"`
 
-	EntryDate  *time.Time `json:"entry_date"`
-	ExitDate   *time.Time `json:"exit_date"`
-	Notes      *string    `json:"notes"`
-	Screenshot *string    `json:"screenshot_url"`
-	Tags       []string   `json:"tags"`
+	EntryDate   *time.Time `json:"entry_date"`
+	ExitDate    *time.Time `json:"exit_date"`
+	Notes       *string    `json:"notes"`
+	Screenshots []string   `json:"screenshot_urls"`
+	Tags        []string   `json:"tags"`
 }
 
 func UpdateTrade(c *gin.Context) {
+	userID := c.GetString("userID")
 	accountID := c.GetString("accountID")
 	tradeID := c.Param("trade_id")
 
@@ -111,17 +111,18 @@ func UpdateTrade(c *gin.Context) {
 		updates["exit_date"] = *req.ExitDate
 	}
 	if req.Notes != nil {
+		if len(*req.Notes) > 5000 {
+			response.BadRequest(c, "notes no puede superar 5000 caracteres")
+			return
+		}
 		updates["notes"] = *req.Notes
 	}
-	if req.Screenshot != nil {
-		if *req.Screenshot != "" {
-			parsed, err := url.Parse(*req.Screenshot)
-			if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") {
-				response.BadRequest(c, "screenshot_url debe ser una URL válida con esquema http o https")
-				return
-			}
+	if req.Screenshots != nil {
+		if err := validateScreenshotPaths(req.Screenshots, userID); err != nil {
+			response.BadRequest(c, err.Error())
+			return
 		}
-		updates["screenshot_url"] = *req.Screenshot
+		updates["screenshot_urls"] = pq.StringArray(req.Screenshots)
 	}
 	if req.Tags != nil {
 		updates["tags"] = pq.StringArray(req.Tags)

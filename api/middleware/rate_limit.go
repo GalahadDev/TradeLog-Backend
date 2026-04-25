@@ -44,16 +44,16 @@ func getLimiter(ip string) *rate.Limiter {
 		return l.limiter
 	}
 
-	// 60 peticiones por minuto con burst de 20
+	// 20 req/s sostenidas con burst de 60 (pico inicial).
 	l := &ipLimiter{
-		limiter:  rate.NewLimiter(rate.Every(time.Second), 20),
+		limiter:  rate.NewLimiter(rate.Limit(20), 60),
 		lastSeen: time.Now(),
 	}
 	limiters[ip] = l
 	return l.limiter
 }
 
-// RateLimit aplica un límite de 60 req/min por IP (burst 20).
+// RateLimit aplica un límite de 20 req/s sostenidas con burst de 60 por IP.
 func RateLimit() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ip := c.ClientIP()

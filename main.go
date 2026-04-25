@@ -48,6 +48,10 @@ func main() {
 
 	r := gin.New()
 
+	_ = r.SetTrustedProxies(nil)
+
+	r.MaxMultipartMemory = 1 << 20
+
 	r.Use(gin.Recovery())
 
 	r.Use(middleware.RequestID())
@@ -115,8 +119,12 @@ func main() {
 	port := config.GetPort()
 
 	srv := &http.Server{
-		Addr:    ":" + port,
-		Handler: r,
+		Addr:              ":" + port,
+		Handler:           r,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      60 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}
 
 	// Iniciar servidor en goroutine separada

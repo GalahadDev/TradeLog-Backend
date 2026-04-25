@@ -32,6 +32,18 @@ func UpdateMyProfile(c *gin.Context) {
 		return
 	}
 
+	if req.FullName != nil && len(*req.FullName) > 100 {
+		response.BadRequest(c, "full_name no puede superar 100 caracteres")
+		return
+	}
+	if req.Bio != nil && len(*req.Bio) > 500 {
+		response.BadRequest(c, "bio no puede superar 500 caracteres")
+		return
+	}
+	if req.PhoneNumber != nil && len(*req.PhoneNumber) > 30 {
+		response.BadRequest(c, "phone_number no puede superar 30 caracteres")
+		return
+	}
 	if req.AvatarURL != nil && *req.AvatarURL != "" {
 		parsed, err := url.Parse(*req.AvatarURL)
 		if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") {
@@ -53,7 +65,7 @@ func UpdateMyProfile(c *gin.Context) {
 		return
 	}
 
-	updates := make(map[string]interface{})
+	updates := make(map[string]any)
 
 	if req.FullName != nil {
 		updates["full_name"] = *req.FullName
